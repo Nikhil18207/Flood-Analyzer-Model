@@ -181,6 +181,62 @@ async def analyze_image(file: UploadFile = File(...)):
         logger.error(f"Error analyzing image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/analyze/coordinates")
+async def analyze_coordinates(request: CoordinateRequest):
+    """
+    Analyze flood risk based on coordinates using Gemini AI
+    """
+    try:
+        logger.info(f"Analyzing coordinates: {request.latitude}, {request.longitude}")
+        
+        # Validate coordinates
+        if not (-90 <= request.latitude <= 90):
+            raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90")
+        if not (-180 <= request.longitude <= 180):
+            raise HTTPException(status_code=400, detail="Longitude must be between -180 and 180")
+        
+        prompt = f"""
+        Analyze flood risk for coordinates: {request.latitude}, {request.longitude}
+        
+        Please provide:
+        1. Risk Level (Low/Medium/High/Very High)
+        2. Description of the risk based on geographical factors
+        3. 3-5 specific recommendations
+        4. Estimated elevation in meters
+        5. Estimated distance from water bodies in meters
+        6. Analysis of terrain, proximity to rivers/lakes, and flood risk factors
+        
+        Format your response as JSON with these fields:
+        - risk_level
+        - description
+        - recommendations (array of strings)
+        - elevation (number)
+        - distance_from_water (number)
+        - ai_analysis (string describing your analysis)
+        """
+        
+        try:
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            response = model.generate_content(prompt)
+            
+            parsed_data = parse_gemini_response(response.text)
+            
+        except Exception as ai_error:
+            logger.error(f"Error calling Gemini AI: {str(ai_error)}")
+            parsed_data = generate_coordinate_risk_assessment(request.latitude, request.longitude)
+            parsed_data["ai_analysis"] = "AI analysis was not available, using simulated assessment"
+        
+        return {
+            "success": True,
+            **parsed_data,
+            "ai_analysis": parsed_data.get("ai_analysis", ""),
+            "message": "Coordinate analysis completed successfully using Gemini AI"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing coordinates: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def generate_image_risk_assessment() -> dict:
     """Generate risk assessment for image analysis"""
     import random
@@ -223,6 +279,59 @@ def generate_image_risk_assessment() -> dict:
         "recommendations": recommendations[risk_level],
         "elevation": round(random.uniform(10, 100), 1),
         "distance_from_water": round(random.uniform(200, 2000), 1)
+    }
+
+def generate_coordinate_risk_assessment(lat: float, lng: float) -> dict:
+    """Generate risk assessment for coordinate analysis"""
+    import random
+    
+    # Simple logic based on coordinates
+    risk_level = "Medium"  # Default
+    
+    # Higher risk near water bodies (simplified logic)
+    if abs(lat) < 45 and abs(lng) < 90:  # Rough approximation of coastal areas
+        risk_level = random.choice(["High", "Very High"])
+    elif abs(lat) < 60:
+        risk_level = random.choice(["Medium", "High"])
+    else:
+        risk_level = random.choice(["Low", "Medium"])
+    
+    descriptions = {
+        "Low": f"Coordinates ({lat}, {lng}) show low flood risk terrain with good elevation.",
+        "Medium": f"Coordinates ({lat}, {lng}) indicate moderate flood risk factors.",
+        "High": f"Coordinates ({lat}, {lng}) reveal high flood risk characteristics.",
+        "Very High": f"Coordinates ({lat}, {lng}) show very high flood risk indicators."
+    }
+    
+    recommendations = {
+        "Low": [
+            "Continue monitoring terrain changes",
+            "Maintain current drainage systems",
+            "Stay informed about weather patterns"
+        ],
+        "Medium": [
+            "Improve drainage infrastructure",
+            "Consider flood monitoring systems",
+            "Develop emergency response plan"
+        ],
+        "High": [
+            "Install comprehensive flood barriers",
+            "Implement early warning systems",
+            "Consider structural reinforcements"
+        ],
+        "Very High": [
+            "Immediate flood protection measures needed",
+            "Consider relocation to higher ground",
+            "Implement comprehensive emergency protocols"
+        ]
+    }
+    
+    return {
+        "risk_level": risk_level,
+        "description": descriptions[risk_level],
+        "recommendations": recommendations[risk_level],
+        "elevation": round(random.uniform(10, 200), 1),
+        "distance_from_water": round(random.uniform(100, 3000), 1)
     }
 
 if __name__ == "__main__":

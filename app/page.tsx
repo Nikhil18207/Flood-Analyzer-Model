@@ -8,15 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Loading, LoadingSpinner } from "@/components/ui/loading";
+import { useToast } from "@/lib/use-toast";
+import { API_BASE_URL } from "@/config/api";
 import {
   MapPin,
   AlertTriangle,
@@ -41,6 +38,7 @@ interface FloodRiskData {
 }
 
 export default function FloodDetectionSystem() {
+  const { toast } = useToast();
   const [inputLat, setInputLat] = useState("");
   const [inputLng, setInputLng] = useState("");
   const [floodRisk, setFloodRisk] = useState<FloodRiskData | null>(null);
@@ -50,18 +48,13 @@ export default function FloodDetectionSystem() {
   );
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [showAlert, setShowAlert] = useState(false);
-  const [alertMessage, setAlertMessage] = useState("");
+
   const [mapError, setMapError] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const mapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const API_BASE_URL = process.env.NODE_ENV === 'development' 
-    ? "http://localhost:8000" 
-    : "https://flood-analyser.onrender.com";
 
   // Initialize Google Maps
   useEffect(() => {
@@ -111,8 +104,11 @@ export default function FloodDetectionSystem() {
   // Analysis handlers
   const handleCoordinateSubmit = async () => {
     if (!inputLat || !inputLng) {
-      setAlertMessage("Please enter both latitude and longitude");
-      setShowAlert(true);
+      toast({
+        title: "Input Error",
+        description: "Please enter both latitude and longitude",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -127,10 +123,11 @@ export default function FloodDetectionSystem() {
       lng < -180 ||
       lng > 180
     ) {
-      setAlertMessage(
-        "Please enter valid coordinates (Lat: -90 to 90, Lng: -180 to 180)"
-      );
-      setShowAlert(true);
+      toast({
+        title: "Invalid Coordinates",
+        description: "Please enter valid coordinates (Lat: -90 to 90, Lng: -180 to 180)",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -149,6 +146,12 @@ export default function FloodDetectionSystem() {
       };
       setFloodRisk(riskData);
       setAiAnalysis(apiResponse.ai_analysis || "");
+
+      toast({
+        title: "Analysis Complete",
+        description: `Flood risk assessment completed. Risk level: ${riskData.riskLevel}`,
+        variant: "success",
+      });
 
       // Update map
       if (map) {
@@ -181,10 +184,11 @@ export default function FloodDetectionSystem() {
       }
     } catch (error) {
       console.error("Error analyzing coordinates:", error);
-      setAlertMessage(
-        "Error analyzing coordinates. Please check if the backend server is running."
-      );
-      setShowAlert(true);
+      toast({
+        title: "Analysis Error",
+        description: "Error analyzing coordinates. Please check if the backend server is running.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -194,12 +198,13 @@ export default function FloodDetectionSystem() {
     const file = event.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024 || !file.type.startsWith("image/")) {
-        setAlertMessage(
-          file.size > 10 * 1024 * 1024
+        toast({
+          title: "File Error",
+          description: file.size > 10 * 1024 * 1024
             ? "Image size must be less than 10MB"
-            : "Please select a valid image file"
-        );
-        setShowAlert(true);
+            : "Please select a valid image file",
+          variant: "destructive",
+        });
         return;
       }
       setSelectedImage(file);
@@ -211,8 +216,11 @@ export default function FloodDetectionSystem() {
 
   const handleImageAnalysis = async () => {
     if (!selectedImage) {
-      setAlertMessage("Please select an image first");
-      setShowAlert(true);
+      toast({
+        title: "No Image Selected",
+        description: "Please select an image first",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -232,10 +240,11 @@ export default function FloodDetectionSystem() {
       setAiAnalysis(apiResponse.ai_analysis || "");
     } catch (error) {
       console.error("Error analyzing image:", error);
-      setAlertMessage(
-        "Error analyzing image. Please check if the backend server is running."
-      );
-      setShowAlert(true);
+      toast({
+        title: "Analysis Error",
+        description: "Error analyzing image. Please check if the backend server is running.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -343,7 +352,7 @@ export default function FloodDetectionSystem() {
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <LoadingSpinner size="sm" className="mr-2" />
                         Analyzing...
                       </>
                     ) : (
@@ -425,7 +434,7 @@ export default function FloodDetectionSystem() {
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <LoadingSpinner size="sm" className="mr-2" />
                           Analyzing...
                         </>
                       ) : (
@@ -451,14 +460,11 @@ export default function FloodDetectionSystem() {
             </CardHeader>
             <CardContent>
               {isLoading && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
-                  <p className="text-slate-600">
-                    {analysisType === "coordinates"
-                      ? "Analyzing coordinates..."
-                      : "Analyzing image..."}
-                  </p>
-                </div>
+                <Loading 
+                  size="lg" 
+                  text={analysisType === "coordinates" ? "Analyzing coordinates..." : "Analyzing image..."}
+                  className="py-12"
+                />
               )}
 
               {floodRisk && !isLoading && (
@@ -570,15 +576,7 @@ export default function FloodDetectionSystem() {
         </Card>
       </div>
 
-      {/* Alert Dialog */}
-      <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Input Error</AlertDialogTitle>
-            <AlertDialogDescription>{alertMessage}</AlertDialogDescription>
-          </AlertDialogHeader>
-        </AlertDialogContent>
-      </AlertDialog>
+
     </div>
   );
 }
